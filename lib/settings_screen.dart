@@ -1,14 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'theme_cubit.dart';
 
 class SettingsScreen extends StatelessWidget {
-  final bool isDarkMode;
-  final Function(bool) onThemeChanged;
-
-  const SettingsScreen({
-    super.key,
-    required this.isDarkMode,
-    required this.onThemeChanged,
-  });
+  const SettingsScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -30,12 +25,16 @@ class SettingsScreen extends StatelessWidget {
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 8),
-                  SwitchListTile(
-                    title: const Text('Темная тема'),
-                    value: isDarkMode,
-                    onChanged: (value) {
-                      onThemeChanged(value);
-                      Navigator.pop(context);
+                  BlocBuilder<ThemeCubit, bool>(
+                    builder: (context, isDarkMode) {
+                      return SwitchListTile(
+                        title: const Text('Темная тема'),
+                        value: isDarkMode,
+                        onChanged: (value) {
+                          context.read<ThemeCubit>().toggleTheme(value);
+                          Navigator.pop(context);
+                        },
+                      );
                     },
                   ),
                 ],

@@ -1,28 +1,155 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:hive/hive.dart';
-import 'package:hive_flutter/hive_flutter.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:image_picker/image_picker.dart';
 import 'movie_model.dart';
+import 'movie_cubit.dart';
 
-class MovieListScreen extends StatefulWidget {
+class MovieListScreen extends StatelessWidget {
   const MovieListScreen({super.key});
 
   @override
-  State<MovieListScreen> createState() => _MovieListScreenState();
-}
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Мои любимые фильмы'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.sort),
+            onPressed: () => _showSortOptions(context),
+          ),
+          IconButton(
+            icon: const Icon(Icons.settings),
+            onPressed: () => Navigator.pushNamed(context, '/settings'),
+          ),
+        ],
+      ),
+      body: BlocBuilder<MovieCubit, List<Movie>>(
+        builder: (context, movies) {
+          if (movies.isEmpty) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.movie, size: 50, color: Colors.grey),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Список фильмов пуст',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  const SizedBox(height: 8),
+                  const Text('Нажмите "+" чтобы добавить фильм'),
+                ],
+              ),
+            );
+          }
+          return ListView.builder(
+            padding: const EdgeInsets.all(8),
+            itemCount: movies.length,
+            itemBuilder: (context, index) {
+              final movie = movies[index];
+              return Card(
+                margin: const EdgeInsets.symmetric(vertical: 8),
+                elevation: 2,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: () => _addOrEditMovie(context, index: index),
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: movie.imagePath != null
+                              ? Image.file(
+                                  File(movie.imagePath!),
+                                  width: 80,
+                                  height: 120,
+                                  fit: BoxFit.cover,
+                                )
+                              : Container(
+                                  width: 80,
+                                  height: 120,
+                                  color: Colors.grey[300],
+                                  child: const Icon(Icons.movie, size: 40),
+                                ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                movie.title,
+                                style: const TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Режиссер: ${movie.director}',
+                                style: TextStyle(
+                                  color: Theme.of(context).textTheme.bodySmall?.color,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Год: ${movie.year} • Жанр: ${movie.genre}',
+                              ),
+                              const SizedBox(height: 8),
+                              Row(
+                                children: [
+                                  Icon(Icons.star, color: Colors.amber[600], size: 20),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    movie.rating.toStringAsFixed(1),
+                                    style: const TextStyle(fontWeight: FontWeight.bold),
+                                  ),
+                                  const Text('/10'),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                        Column(
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.edit, color: Colors.blue),
+                              onPressed: () => _addOrEditMovie(context, index: index),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.delete, color: Colors.red),
+                              onPressed: () => _deleteMovie(context, index),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            },
+          );
+        },
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => _addOrEditMovie(context),
+        child: const Icon(Icons.add),
+      ),
+    );
+  }
 
-class _MovieListScreenState extends State<MovieListScreen> {
-  final _moviesBox = Hive.box<Movie>('moviesBox');
-  final _genreOptions = [
-    'Боевик', 'Комедия', 'Драма', 'Фантастика', 'Ужасы', 
-    'Триллер', 'Романтика', 'Анимация', 'Документальный', 'Не указан'
-  ];
-  final ImagePicker _picker = ImagePicker();
-
-  Future<void> _addOrEditMovie({int? index}) async {
+  static Future<void> _addOrEditMovie(BuildContext context, {int? index}) async {
+    final cubit = context.read<MovieCubit>();
     final isEditing = index != null;
-    final movie = isEditing ? _moviesBox.getAt(index) : null;
+    final movie = isEditing ? cubit.state[index] : null;
+    final _genreOptions = [
+      'Боевик', 'Комедия', 'Драма', 'Фантастика', 'Ужасы', 
+      'Триллер', 'Романтика', 'Анимация', 'Документальный', 'Не указан'
+    ];
+    final _picker = ImagePicker();
 
     final titleController = TextEditingController(text: movie?.title ?? '');
     final directorController = TextEditingController(text: movie?.director ?? '');
@@ -170,9 +297,9 @@ class _MovieListScreenState extends State<MovieListScreen> {
                     );
 
                     if (isEditing) {
-                      _moviesBox.putAt(index, newMovie);
+                      cubit.updateMovie(index!, newMovie);
                     } else {
-                      _moviesBox.add(newMovie);
+                      cubit.addMovie(newMovie);
                     }
                     Navigator.pop(context);
                   }
@@ -186,7 +313,8 @@ class _MovieListScreenState extends State<MovieListScreen> {
     );
   }
 
-  void _deleteMovie(int index) {
+  static void _deleteMovie(BuildContext context, int index) {
+    final cubit = context.read<MovieCubit>();
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -199,7 +327,7 @@ class _MovieListScreenState extends State<MovieListScreen> {
           ),
           TextButton(
             onPressed: () {
-              _moviesBox.deleteAt(index);
+              cubit.deleteMovie(index);
               Navigator.pop(context);
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('Фильм удален')),
@@ -212,238 +340,85 @@ class _MovieListScreenState extends State<MovieListScreen> {
     );
   }
 
-  void _showSortOptions() {
-    showModalBottomSheet(
-      context: context,
-      builder: (context) {
-        return Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Padding(
-              padding: EdgeInsets.all(16.0),
-              child: Text(
-                'Сортировать по',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-            ),
-            ListTile(
-              leading: const Icon(Icons.sort_by_alpha),
-              title: const Text('Названию (А-Я)'),
-              onTap: () {
-                _sortMovies('title_asc');
-                Navigator.pop(context);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.sort_by_alpha),
-              title: const Text('Названию (Я-А)'),
-              onTap: () {
-                _sortMovies('title_desc');
-                Navigator.pop(context);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.calendar_today),
-              title: const Text('Году (новые)'),
-              onTap: () {
-                _sortMovies('year_desc');
-                Navigator.pop(context);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.calendar_today),
-              title: const Text('Году (старые)'),
-              onTap: () {
-                _sortMovies('year_asc');
-                Navigator.pop(context);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.star),
-              title: const Text('Рейтингу (высокий)'),
-              onTap: () {
-                _sortMovies('rating_desc');
-                Navigator.pop(context);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.star_border),
-              title: const Text('Рейтингу (низкий)'),
-              onTap: () {
-                _sortMovies('rating_asc');
-                Navigator.pop(context);
-              },
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  void _sortMovies(String sortBy) {
-  final movies = _moviesBox.values.toList();
-  
-  switch (sortBy) {
-    case 'title_asc':
-      movies.sort((a, b) => a.title.compareTo(b.title));
-      break;
-    case 'title_desc':
-      movies.sort((a, b) => b.title.compareTo(a.title));
-      break;
-    case 'year_asc':
-      movies.sort((a, b) => a.year.compareTo(b.year));
-      break;
-    case 'year_desc':
-      movies.sort((a, b) => b.year.compareTo(a.year));
-      break;
-    case 'rating_asc':
-      movies.sort((a, b) => a.rating.compareTo(b.rating));
-      break;
-    case 'rating_desc':
-      movies.sort((a, b) => b.rating.compareTo(a.rating));
-      break;
-  }
-
-  final keys = _moviesBox.keys.toList();
-  
-  for (var i = 0; i < movies.length; i++) {
-    _moviesBox.put(keys[i], movies[i]);
-  }
-
-  setState(() {});
-}
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Мои любимые фильмы'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.sort),
-            onPressed: _showSortOptions,
-          ),
-          IconButton(
-            icon: const Icon(Icons.settings),
-            onPressed: () => Navigator.pushNamed(context, '/settings'),
-          ),
-        ],
-      ),
-      body: ValueListenableBuilder(
-        valueListenable: _moviesBox.listenable(),
-        builder: (context, Box<Movie> box, _) {
-          if (box.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.movie, size: 50, color: Colors.grey),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Список фильмов пуст',
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                  const SizedBox(height: 8),
-                  const Text('Нажмите "+" чтобы добавить фильм'),
-                ],
-              ),
-            );
-          }
-          return ListView.builder(
-            padding: const EdgeInsets.all(8),
-            itemCount: box.length,
-            itemBuilder: (context, index) {
-              final movie = box.getAt(index);
-              return Card(
-                margin: const EdgeInsets.symmetric(vertical: 8),
-                elevation: 2,
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(12),
-                  onTap: () => _addOrEditMovie(index: index),
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(8),
-                          child: movie?.imagePath != null
-                              ? Image.file(
-                                  File(movie!.imagePath!),
-                                  width: 80,
-                                  height: 120,
-                                  fit: BoxFit.cover,
-                                )
-                              : Container(
-                                  width: 80,
-                                  height: 120,
-                                  color: Colors.grey[300],
-                                  child: const Icon(Icons.movie, size: 40),
-                                ),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                movie!.title,
-                                style: const TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                'Режиссер: ${movie.director}',
-                                style: TextStyle(
-                                  color: Theme.of(context).textTheme.bodySmall?.color,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                'Год: ${movie.year} • Жанр: ${movie.genre}',
-                              ),
-                              const SizedBox(height: 8),
-                              Row(
-                                children: [
-                                  Icon(Icons.star, color: Colors.amber[600], size: 20),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    movie.rating.toStringAsFixed(1),
-                                    style: const TextStyle(fontWeight: FontWeight.bold),
-                                  ),
-                                  const Text('/10'),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                        Column(
-                          children: [
-                            IconButton(
-                              icon: const Icon(Icons.edit, color: Colors.blue),
-                              onPressed: () => _addOrEditMovie(index: index),
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.delete, color: Colors.red),
-                              onPressed: () => _deleteMovie(index),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
+  static void _showSortOptions(BuildContext context) {
+  final cubit = context.read<MovieCubit>();
+  showModalBottomSheet(
+    context: context,
+    builder: (context) {
+      return SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Padding(
+                padding: EdgeInsets.all(13.0),
+                child: Text(
+                  'Сортировать по',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
-              );
-            },
-          );
-        },
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _addOrEditMovie(),
-        child: const Icon(Icons.add),
-      ),
-    );
-  }
+              ),
+              Flexible(
+                child: ListView(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  children: [
+                    ListTile(
+                      leading: const Icon(Icons.sort_by_alpha),
+                      title: const Text('Названию (А-Я)'),
+                      onTap: () {
+                        cubit.sortMovies('title_asc');
+                        Navigator.pop(context);
+                      },
+                    ),
+                    ListTile(
+                      leading: const Icon(Icons.sort_by_alpha),
+                      title: const Text('Названию (Я-А)'),
+                      onTap: () {
+                        cubit.sortMovies('title_desc');
+                        Navigator.pop(context);
+                      },
+                    ),
+                    ListTile(
+                      leading: const Icon(Icons.calendar_today),
+                      title: const Text('Году (новые)'),
+                      onTap: () {
+                        cubit.sortMovies('year_desc');
+                        Navigator.pop(context);
+                      },
+                    ),
+                    ListTile(
+                      leading: const Icon(Icons.calendar_today),
+                      title: const Text('Году (старые)'),
+                      onTap: () {
+                        cubit.sortMovies('year_asc');
+                        Navigator.pop(context);
+                      },
+                    ),
+                    ListTile(
+                      leading: const Icon(Icons.star),
+                      title: const Text('Рейтингу (высокий)'),
+                      onTap: () {
+                        cubit.sortMovies('rating_desc');
+                        Navigator.pop(context);
+                      },
+                    ),
+                    ListTile(
+                      leading: const Icon(Icons.star_border),
+                      title: const Text('Рейтингу (низкий)'),
+                      onTap: () {
+                        cubit.sortMovies('rating_asc');
+                        Navigator.pop(context);
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    },
+  );
+}
 }
